@@ -49,8 +49,8 @@ int main(int argc, char **argv) {
 int launch_main_thread(void * void_data) {
 
   MainThreadData * data = (MainThreadData *)void_data;
-  struct timespec frame_delay_time = {0, 50000000};
-  DemoWindow * window = create_demo_window(50, 50);
+  struct timespec frame_delay_time = {0, 1000000000/30};
+  DemoWindow * window = create_demo_window(960, 640);
   SDL_Renderer * renderer = window->renderer;
 
   // Notify event thread that the display is created
@@ -71,10 +71,8 @@ int launch_main_thread(void * void_data) {
     // Switch double buffers
     SDL_LockMutex(window->buffer_mutex);
     // Update double buffers
-    for(int y = 0; y < window->height; ++y) {
-      for(int x = 0; x < window->width; ++x) {
-	window->present_buffer[x + y * window->width] = window->draw_buffer[x + y * window->width];
-      }
+    for(int i = 0; i < window->height * window->width / 4; ++i ) {
+	window->present_buffer[i] = window->draw_buffer[i];
     }
     int * temp_buffer = window->draw_buffer;
     window->draw_buffer = window->present_buffer;
@@ -82,23 +80,18 @@ int launch_main_thread(void * void_data) {
     SDL_UnlockMutex(window->buffer_mutex);  
 
     // Draw the new data
-    SDL_Point points[3] = {{0, 0},
-			   {1, 0},
-			   {0, 1}};
-    SDL_Rect rect = {0, 0, 2, 2};
     for(int y = 0; y < window->height / 2; ++y) {
       for(int x = 0; x < window->width / 2; ++x) {
-	if(window->present_buffer[(2 * x) + (2 * y) * window->width] == 1) {
-	  points[0] = (SDL_Point){2 * x, 2 * y};
-	  points[1] = (SDL_Point){2 * x + 1, 2 * y};
-	  points[2] = (SDL_Point){2 * x, 2 * y + 1};
-	  SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0x00);
+	if(window->present_buffer[x + y * window->width / 2] == 1) {
+	  SDL_Point points[3] = {{2 * x    , 2 * y    },
+				 {2 * x + 1, 2 * y    },
+				 {2 * x    , 2 * y + 1}};
+	  SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
 	  SDL_RenderDrawPoints(renderer, points, 3);
 	}
 	else {
-	  rect.x = 2 * x;
-	  rect.y = 2 * y;
-	  SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0x00);
+	  SDL_Rect rect = {2 * x, 2 * y};
+	  SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0xFF);
 	  SDL_RenderFillRect(renderer, &rect);
 	}
       }
@@ -114,7 +107,6 @@ int launch_main_thread(void * void_data) {
 void handle_events(EventThreadData * data) {
 
   SDL_Event event;
-  struct timespec event_delay_time = {0, 50000000};
   int pixel_value;
 
   // Wait for main thread to create the display
@@ -129,7 +121,7 @@ void handle_events(EventThreadData * data) {
     if(!is_running) break;
     SDL_UnlockMutex(mutex_is_running);
     
-    while(SDL_PollEvent(&event)) {
+    if(SDL_WaitEvent(&event)) {
       switch(event.type) {
       case SDL_QUIT:
 	SDL_LockMutex(mutex_is_running);
@@ -138,28 +130,26 @@ void handle_events(EventThreadData * data) {
 	goto event_thread_exit;
 	break;
       case SDL_MOUSEBUTTONDOWN:;
-	int x = event.button.x;
-	int y = event.button.y;
+	int x = event.button.x / 2;
+	int y = event.button.y / 2;
 	SDL_LockMutex(window->buffer_mutex);
-	int index = ((x / 2) * 2) + ((y / 2) * 2) * window->width;
+	int index = x + y * window->width / 2;
 	pixel_value = window->draw_buffer[index] == 1 ? 0 : 1;
 	window->draw_buffer[index] = pixel_value;
 	SDL_UnlockMutex(window->buffer_mutex);
 	break;
       case SDL_MOUSEMOTION:
 	if(event.motion.state & SDL_BUTTON_LMASK) {
-	  int x = event.motion.x;
-	  int y = event.motion.y;
+	  int x = event.button.x / 2;
+	  int y = event.button.y / 2;
 	  SDL_LockMutex(window->buffer_mutex);
-	  int index = ((x / 2) * 2) + ((y / 2) * 2) * window->width;
+	  int index = x + y * window->width / 2;
 	  window->draw_buffer[index] = pixel_value;
 	  SDL_UnlockMutex(window->buffer_mutex);	  
 	}
 	break;
       }
     }
-    
-    nanosleep(&event_delay_time, NULL);
   }
 
  event_thread_exit:
@@ -174,8 +164,8 @@ DemoWindow * create_demo_window(int width, int height) {
 			 NULL,
 			 NULL,
 			 SDL_CreateMutex(),
-			 calloc(width * height, sizeof(int)),
-			 calloc(width * height, sizeof(int))};
+			 calloc(width * height / 4, sizeof(int)),
+			 calloc(width * height / 4, sizeof(int))};
   
   if(SDL_CreateWindowAndRenderer(width,
 				 height,
