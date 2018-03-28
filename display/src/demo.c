@@ -21,57 +21,70 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Error creating run mutex:%s\n", SDL_GetError());
     exit(-1);
   }
-  
-  DemoWindow * window = NULL;
-  SDL_mutex * display_read_mutex = SDL_CreateMutex();
-  SDL_cond * display_read_cond = SDL_CreateCond();
-  MainThreadData main_data = {display_read_mutex,
-			      display_read_cond,
-			      &window};
-  EventThreadData event_data = {display_read_mutex,
-				display_read_cond,
-				&window,
+
+  RenderThreadData render_data = {SDL_CreateMutex(),
+				SDL_CreateCond(),
 				NULL};
+  ComputeThreadData compute_data = {render_data.window};
+  SDL_Thread * render_thread = SDL_CreateThread(launch_render_thread,
+						"Render Thread",
+						&render_data);
+  
+  // Wait for main thread to finish creating
+  // the display before we continue
+  SDL_LockMutex(render_data.display_ready_mutex);
+  SDL_CondWait(render_data.display_ready_cond,
+	       render_data.display_ready_mutex);
+  SDL_UnlockMutex(render_data.display_ready_mutex);
+  
 
   // Create the primary rendering and computation thread
-  event_data.main_thread = SDL_CreateThread(launch_main_thread,
-					    "Primary working thread",
-					    &main_data);
+  EventThreadData event_data = {render_thread,
+				SDL_CreateThread(launch_compute_thread,
+						 "Compute Thread",
+						 &compute_data)};
+
+  
   // Let this thread continue running the event handler
   handle_events(&event_data);
 
-  SDL_DestroyCond(display_read_cond);
-  SDL_DestroyMutex(display_read_mutex);
-  destroy_demo_window(window);
+  SDL_DestroyCond(render_data.display_ready_cond);
+  SDL_DestroyMutex(render_data.display_ready_mutex);
+  destroy_demo_window(render_data.window);
   return 0;
 }
 
-int launch_main_thread(void * void_data) {
+int launch_compute_thread(void * void_data) {
 
-  MainThreadData * data = (MainThreadData *)void_data;
+  ComputeThreadData * data = (ComputeThreadData *)void_data;
+
+  while(1) {
+    CHECK_QUIT_REQUESTED
+    
+  }
+
+  return 0;
+}
+
+int launch_render_thread(void * void_data) {
+
+  RenderThreadData * data = (RenderThreadData *)void_data;
   struct timespec frame_delay_time = {0, 1000000000/30};
   DemoWindow * window = create_demo_window(960, 640);
   SDL_Renderer * renderer = window->renderer;
 
   // Notify event thread that the display is created
-  *((MainThreadData *)void_data)->window = window;
-  SDL_LockMutex(data->display_read_mutex);
-  SDL_CondSignal(data->display_read_cond);
-  SDL_UnlockMutex(data->display_read_mutex);  
-
-  SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0xFF);
-  SDL_RenderClear(renderer);
-  SDL_RenderPresent(renderer);
+  data->window = window;
+  SDL_LockMutex(data->display_ready_mutex);
+  SDL_CondSignal(data->display_ready_cond);
+  SDL_UnlockMutex(data->display_ready_mutex);  
 
   while(1) {
-    SDL_LockMutex(mutex_is_running);
-    if(!is_running) break;
-    SDL_UnlockMutex(mutex_is_running);
+    CHECK_QUIT_REQUESTED
 
     // Switch double buffers
     SDL_LockMutex(window->buffer_mutex);
-    // Update double buffers
-    for(int i = 0; i < window->height * window->width / 4; ++i ) {
+    for(int i = 0; i < window->height * window->width; ++i ) {
 	window->present_buffer[i] = window->draw_buffer[i];
     }
     int * temp_buffer = window->draw_buffer;
@@ -80,9 +93,9 @@ int launch_main_thread(void * void_data) {
     SDL_UnlockMutex(window->buffer_mutex);  
 
     // Draw the new data
-    for(int y = 0; y < window->height / 2; ++y) {
-      for(int x = 0; x < window->width / 2; ++x) {
-	if(window->present_buffer[x + y * window->width / 2] == 1) {
+    for(int y = 0; y < window->height; ++y) {
+      for(int x = 0; x < window->width; ++x) {
+	if(window->present_buffer[x + y * window->width] == 1) {
 	  SDL_Point points[3] = {{2 * x    , 2 * y    },
 				 {2 * x + 1, 2 * y    },
 				 {2 * x    , 2 * y + 1}};
@@ -107,60 +120,34 @@ int launch_main_thread(void * void_data) {
 void handle_events(EventThreadData * data) {
 
   SDL_Event event;
-  int pixel_value;
-
-  // Wait for main thread to create the display
-  SDL_LockMutex(data->display_read_mutex);
-  SDL_CondWait(data->display_read_cond, data->display_read_mutex);
-  SDL_UnlockMutex(data->display_read_mutex);  
-  DemoWindow * window = *data->window;
   
   while(1) {
-
-    SDL_LockMutex(mutex_is_running);
-    if(!is_running) break;
-    SDL_UnlockMutex(mutex_is_running);
+    CHECK_QUIT_REQUESTED
     
     if(SDL_WaitEvent(&event)) {
       switch(event.type) {
       case SDL_QUIT:
 	SDL_LockMutex(mutex_is_running);
 	is_running = 0;
-	SDL_UnlockMutex(mutex_is_running);	is_running = 0;
-	goto event_thread_exit;
+	SDL_UnlockMutex(mutex_is_running);
 	break;
       case SDL_MOUSEBUTTONDOWN:;
-	int x = event.button.x / 2;
-	int y = event.button.y / 2;
-	SDL_LockMutex(window->buffer_mutex);
-	int index = x + y * window->width / 2;
-	pixel_value = window->draw_buffer[index] == 1 ? 0 : 1;
-	window->draw_buffer[index] = pixel_value;
-	SDL_UnlockMutex(window->buffer_mutex);
 	break;
       case SDL_MOUSEMOTION:
-	if(event.motion.state & SDL_BUTTON_LMASK) {
-	  int x = event.button.x / 2;
-	  int y = event.button.y / 2;
-	  SDL_LockMutex(window->buffer_mutex);
-	  int index = x + y * window->width / 2;
-	  window->draw_buffer[index] = pixel_value;
-	  SDL_UnlockMutex(window->buffer_mutex);	  
-	}
 	break;
       }
     }
   }
 
- event_thread_exit:
   SDL_WaitThread(data->main_thread, NULL);
+  SDL_WaitThread(data->compute_thread, NULL);
 }
 
 DemoWindow * create_demo_window(int width, int height) {
 
   DemoWindow * window = malloc(sizeof(DemoWindow));
-  *window = (DemoWindow){width,
-			 height,
+  *window = (DemoWindow){width / 2,
+			 height / 2,
 			 NULL,
 			 NULL,
 			 SDL_CreateMutex(),
@@ -177,6 +164,10 @@ DemoWindow * create_demo_window(int width, int height) {
 	    SDL_GetError());
     exit(-1);
   }
+
+  SDL_SetRenderDrawColor(window->renderer, 0x00, 0x00, 0x00, 0xFF);
+  SDL_RenderClear(window->renderer);
+  SDL_RenderPresent(window->renderer);
 
   return window;
 }

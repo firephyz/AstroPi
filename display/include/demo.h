@@ -15,22 +15,31 @@ typedef struct {
 } DemoWindow;
 
 typedef struct {
-  SDL_mutex * display_read_mutex;
-  SDL_cond * display_read_cond;
-  DemoWindow ** window;
-} MainThreadData;
+  SDL_mutex * display_ready_mutex;
+  SDL_cond * display_ready_cond;
+  DemoWindow * window;
+} RenderThreadData;
 
 typedef struct {
-  SDL_mutex * display_read_mutex;
-  SDL_cond * display_read_cond;
-  DemoWindow ** window;
+  DemoWindow * window;
+} ComputeThreadData;
+
+typedef struct {
   SDL_Thread * main_thread;
+  SDL_Thread * compute_thread;
 } EventThreadData;
+
+#define CHECK_QUIT_REQUESTED\
+  SDL_LockMutex(mutex_is_running);\
+  int quit_requested = !is_running;\
+  SDL_UnlockMutex(mutex_is_running);\
+  if(quit_requested) break;
 
 DemoWindow * create_demo_window(int width, int height);
 void destroy_demo_window(DemoWindow * window);
 
-int launch_main_thread(void * void_data);
+int launch_render_thread(void * void_data);
+int launch_compute_thread(void * void_data);
 void handle_events(EventThreadData * data);
 
 #endif
