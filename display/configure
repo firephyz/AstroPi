@@ -1,0 +1,28 @@
+#!/bin/bash
+
+TOP_DIR="$(cd "$(dirname $0)"; pwd -P)"
+cd $TOP_DIR
+
+if [ $# -eq 0 ]; then
+    echo "Configuring project..."
+    mkdir -p build
+    cd build
+    cmake ../
+elif [ "$1" = "make" ]; then
+    echo "Building project..."
+    cd build
+    make
+
+    cd ../
+    mkdir -p bin
+    cp ./build/demo ./bin/demo
+elif [ "$1" = "clean" ]; then
+    echo "Cleaning directories..."
+    rm -rf build
+    rm -rf bin
+
+    find . -name "*~" -delete
+fi
+    
+     
+     
