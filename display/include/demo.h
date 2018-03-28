@@ -9,17 +9,21 @@ typedef struct {
   int height;
   SDL_Window * window;
   SDL_Renderer * renderer;
-  SDL_mutex * render_mutex;
+  SDL_mutex * buffer_mutex;
   int *draw_buffer;
   int *present_buffer;
 } DemoWindow;
 
 typedef struct {
-  DemoWindow * window;
+  SDL_mutex * display_read_mutex;
+  SDL_cond * display_read_cond;
+  DemoWindow ** window;
 } MainThreadData;
 
 typedef struct {
-  DemoWindow * window;
+  SDL_mutex * display_read_mutex;
+  SDL_cond * display_read_cond;
+  DemoWindow ** window;
   SDL_Thread * main_thread;
 } EventThreadData;
 
