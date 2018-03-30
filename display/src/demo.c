@@ -25,7 +25,6 @@ int main(int argc, char **argv) {
   RenderThreadData render_data = {SDL_CreateMutex(),
 				SDL_CreateCond(),
 				NULL};
-  ComputeThreadData compute_data = {render_data.window};
   SDL_Thread * render_thread = SDL_CreateThread(launch_render_thread,
 						"Render Thread",
 						&render_data);
@@ -39,6 +38,7 @@ int main(int argc, char **argv) {
   
 
   // Create the primary rendering and computation thread
+  ComputeThreadData compute_data = {render_data.window};
   EventThreadData event_data = {render_thread,
 				SDL_CreateThread(launch_compute_thread,
 						 "Compute Thread",
@@ -58,9 +58,56 @@ int launch_compute_thread(void * void_data) {
 
   ComputeThreadData * data = (ComputeThreadData *)void_data;
 
+  double width = 7.5;
+  double height = 5;
+  double delta = 0.000001;
+  GravityBody sun = {{-2, 0},
+		     {0, 0.05},
+		     100};
+  GravityBody planet = {{-0.3, 0},
+			{0, -1},
+			5};
   while(1) {
-    CHECK_QUIT_REQUESTED
-    
+    CHECK_QUIT_REQUESTED;
+
+    // Calculate new position
+    Vector new_sun_pos = {sun.pos.x + sun.vel.x * delta,
+			  sun.pos.y + sun.vel.y * delta};
+    Vector new_planet_pos = {planet.pos.x + planet.vel.x * delta,
+			     planet.pos.y + planet.vel.y * delta};
+
+    // Calculate new velocity
+    double dx = sun.pos.x - planet.pos.x;
+    double dy = sun.pos.y - planet.pos.y;
+    double distance = sqrt(dx * dx + dy * dy);
+    double force = 0.05 * sun.mass * planet.mass / distance / distance;
+
+    Vector sun_acc = {-force * dx / distance / sun.mass,
+		      -force * dy / distance / sun.mass};
+    Vector planet_acc = {force * dx / distance / planet.mass,
+			 force * dy / distance / planet.mass};
+    Vector new_sun_vel = {sun.vel.x + sun_acc.x * delta,
+			  sun.vel.y + sun_acc.y * delta};
+    Vector new_planet_vel = {planet.vel.x + planet_acc.x * delta,
+			     planet.vel.y + planet_acc.y * delta};
+
+    sun.pos = new_sun_pos;
+    sun.vel = new_sun_vel;
+    planet.pos = new_planet_pos;
+    planet.vel = new_planet_vel;
+
+    int sun_x = (width / 2 + sun.pos.x) / width * data->window->width;
+    int sun_y = (height / 2 - sun.pos.y) / height * data->window->height;
+    int planet_x = (width / 2 + planet.pos.x) / width * data->window->width;
+    int planet_y = (height / 2 - planet.pos.y) / height * data->window->height;
+
+    SDL_LockMutex(data->window->buffer_mutex);
+    data->window->draw_buffer[sun_x + sun_y * data->window->width] = 1;
+    data->window->draw_buffer[planet_x + planet_y * data->window->width] = 1;
+    SDL_UnlockMutex(data->window->buffer_mutex);
+
+    struct timespec delay = {0, 1000};
+    //    nanosleep(&delay, NULL);
   }
 
   return 0;
@@ -76,11 +123,11 @@ int launch_render_thread(void * void_data) {
   // Notify event thread that the display is created
   data->window = window;
   SDL_LockMutex(data->display_ready_mutex);
-  SDL_CondSignal(data->display_ready_cond);
+  SDL_CondBroadcast(data->display_ready_cond);
   SDL_UnlockMutex(data->display_ready_mutex);  
 
   while(1) {
-    CHECK_QUIT_REQUESTED
+    CHECK_QUIT_REQUESTED;
 
     // Switch double buffers
     SDL_LockMutex(window->buffer_mutex);
@@ -93,6 +140,7 @@ int launch_render_thread(void * void_data) {
     SDL_UnlockMutex(window->buffer_mutex);  
 
     // Draw the new data
+    SDL_RenderClear(renderer);
     for(int y = 0; y < window->height; ++y) {
       for(int x = 0; x < window->width; ++x) {
 	if(window->present_buffer[x + y * window->width] == 1) {
@@ -122,7 +170,7 @@ void handle_events(EventThreadData * data) {
   SDL_Event event;
   
   while(1) {
-    CHECK_QUIT_REQUESTED
+    CHECK_QUIT_REQUESTED;
     
     if(SDL_WaitEvent(&event)) {
       switch(event.type) {

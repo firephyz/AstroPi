@@ -29,6 +29,17 @@ typedef struct {
   SDL_Thread * compute_thread;
 } EventThreadData;
 
+typedef struct {
+  double x;
+  double y;
+} Vector;
+
+typedef struct {
+  Vector pos;
+  Vector vel;
+  double mass;
+} GravityBody;
+
 #define CHECK_QUIT_REQUESTED\
   SDL_LockMutex(mutex_is_running);\
   int quit_requested = !is_running;\
