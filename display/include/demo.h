@@ -15,6 +15,16 @@ typedef struct {
 } DemoWindow;
 
 typedef struct {
+  SDL_mutex * input_mutex;
+  int has_new_data;
+  int scroll;
+  int button1;
+  int button2;
+  double joystick_x;
+  double joystick_y;
+} EventPacket;
+
+typedef struct {
   SDL_mutex * display_ready_mutex;
   SDL_cond * display_ready_cond;
   DemoWindow * window;
@@ -22,23 +32,14 @@ typedef struct {
 
 typedef struct {
   DemoWindow * window;
+  EventPacket * input_events;
 } ComputeThreadData;
 
 typedef struct {
   SDL_Thread * main_thread;
   SDL_Thread * compute_thread;
+  EventPacket * input_events;
 } EventThreadData;
-
-typedef struct {
-  double x;
-  double y;
-} Vector;
-
-typedef struct {
-  Vector pos;
-  Vector vel;
-  double mass;
-} GravityBody;
 
 #define CHECK_QUIT_REQUESTED\
   SDL_LockMutex(mutex_is_running);\
