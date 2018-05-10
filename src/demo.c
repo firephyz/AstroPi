@@ -21,13 +21,13 @@ int main(int argc, char *argv[]) {
   runtime_data.bodies = malloc(sizeof(SolarBody) * INIT_NUM_BODIES);
   //  runtime_data.num_of_bodies = INIT_NUM_BODIES;
   runtime_data.num_of_bodies = INIT_NUM_BODIES;
-  runtime_data.target_body_index = 0;
+  runtime_data.target_body_index = 2;
   runtime_data.time_index = LOCATION_SAMPLES_PER_PLANET / 2;
   runtime_data.cam = malloc(sizeof(TeleCamera));
   *runtime_data.cam = (TeleCamera){
     .pos = (Vector){0, 0, 0},
     .angle = (Vector){0, 0, 0},
-    .fov = 0.6
+    .fov = 0.00025
   };
   runtime_data.mutex = malloc(sizeof(pthread_mutex_t));
   runtime_data.is_running = 1;
@@ -66,6 +66,8 @@ void demo_planets(DisplayData * display, struct runtime_data_t * data) {
     process_input(display, data);
     adjust_solar_bodies(data);
     renderScene(display, data);
+
+    data->time_index += 1;
     
     display_update(display);
     nanosleep(&delay, NULL);
@@ -88,7 +90,6 @@ void adjust_solar_bodies(struct runtime_data_t * data) {
   // in front of the camera
   SolarBody * target = data->bodies + data->target_body_index;
   calibrate_camera(data, target);
-  transform_body(data, target);
   // Also do the same to the children
   for(int i = 0; i < target->num_of_children; ++i) {
     transform_body(data, target->children[i]);
@@ -98,23 +99,35 @@ void adjust_solar_bodies(struct runtime_data_t * data) {
 void transform_body(struct runtime_data_t * data, SolarBody * body) {
 
   double angle = data->cam->angle.x;
-  Vector pos = {body->pos.x * cos(angle) + body->pos.z * sin(angle),
-		body->pos.y,
-		-body->pos.x * sin(angle) + body->pos.z * cos(angle)};
+  Vector pos = {body->pos.x * cos(angle) + body->pos.y * sin(angle),
+		-body->pos.x * sin(angle) + body->pos.y * cos(angle),
+		body->pos.z};
   body->pos = pos;
 
   angle = data->cam->angle.y;
-  pos = (Vector){body->pos.x,
-		 body->pos.y * cos(angle) - body->pos.z * sin(angle),
-		 body->pos.y * sin(angle) + body->pos.z * cos(angle)};
+  pos = (Vector){-body->pos.x * sin(angle) + body->pos.z * cos(angle),
+		 body->pos.y,
+		 body->pos.x * cos(angle) - body->pos.z * sin(angle)};
   body->pos = pos;  
 }
 
 void calibrate_camera(struct runtime_data_t * data, SolarBody * target) {
-  data->cam->angle.x = atan(target->pos.x / target->pos.z);
-  if(target->pos.z < 0) data->cam->angle.x += M_PI;
-  data->cam->angle.y = atan(target->pos.y / target->pos.z);
-  if(target->pos.z < 0) data->cam->angle.y += M_PI;
+  data->cam->angle.x = atan(target->pos.y / target->pos.x);
+  if(target->pos.x < 0) data->cam->angle.x += M_PI;
+  double angle = data->cam->angle.x;
+  Vector pos = {target->pos.x * cos(angle) + target->pos.y * sin(angle),
+		-target->pos.x * sin(angle) + target->pos.y * cos(angle),
+		target->pos.z};
+  target->pos = pos;
+
+  
+  data->cam->angle.y = atan(target->pos.z / target->pos.x);
+  if(target->pos.x < 0) data->cam->angle.y += M_PI;
+  angle = data->cam->angle.y;
+  pos = (Vector){-target->pos.x * sin(angle) + target->pos.z * cos(angle),
+		 target->pos.y,
+		 target->pos.x * cos(angle) - target->pos.z * sin(angle)};
+  target->pos = pos;
 }
 
 DisplayData * init_display() {

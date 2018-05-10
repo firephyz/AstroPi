@@ -8,47 +8,61 @@
 
 void renderScene(DisplayData * display, struct runtime_data_t * data) {
 
-  double aspect_ratio = (double)display->width / display->height;
-  for(int i = 0; i < data->num_of_bodies; ++i) {
-    SolarBody * body = data->bodies + i;
-    
-    double scale_factor = aspect_ratio / (aspect_ratio + body->pos.z * 2 * tan(M_PI / 2 * data->cam->fov));
-    int pix_x = body->pos.x / aspect_ratio * display->width * scale_factor;
-    int pix_y = body->pos.y * display->height * scale_factor;
-    int pix_r = body->radius * scale_factor * display->width / aspect_ratio;
-
-    pix_x += display->width / 2;
-    pix_y = display->height / 2 - pix_y;
-
-    int color;
-    /* if(body->pos.z > FADE_THRESHOLD) { */
-    /*   if(body->pos.z > FADE_THRESHOLD + FADE_DEPTH) { */
-    /* 	color = COLOR_BLACK; */
-    /*   } */
-    /*   else { */
-    /* 	double ratio = 1 - (body->pos.z - FADE_THRESHOLD) / FADE_DEPTH; */
-    /* 	color = NEW_COLOR((int)(0x1F * ratio), */
-    /* 			  (int)(0x3F * ratio), */
-    /* 			  (int)(0x1F * ratio)); */
-    /*   } */
-    /* } */
-    /* else { */
-    /*   color = COLOR_WHITE; */
-    /* } */
-    color = COLOR_WHITE;
-    display_set_color(display, color);
-    draw_planet(display,
-		pix_x,
-	        pix_y,
-		pix_r);
+  SolarBody * target = data->bodies + data->target_body_index;
+  render_body(display, data, target);
+  for(int i = 0; i < target->num_of_children; ++i) {
+    SolarBody * body = target->children[i];
+    render_body(display, data, body);
   }
 }
 
+void render_body(DisplayData * display, struct runtime_data_t * data, SolarBody * body) {
+  
+  double aspect_ratio = (double)display->width / display->height;
+    
+  double scale_factor = aspect_ratio / (aspect_ratio + body->pos.z * 2 * tan(M_PI / 2 * data->cam->fov));
+  int pix_x = body->pos.x / aspect_ratio * display->width * scale_factor;
+  int pix_y = body->pos.y * display->height * scale_factor;
+  int pix_r = body->radius * scale_factor * display->width / aspect_ratio;
+
+  pix_x += display->width / 2;
+  pix_y = display->height / 2 - pix_y;
+
+  int color;
+  /* if(body->pos.z > FADE_THRESHOLD) { */
+  /*   if(body->pos.z > FADE_THRESHOLD + FADE_DEPTH) { */
+  /* 	color = COLOR_BLACK; */
+  /*   } */
+  /*   else { */
+  /* 	double ratio = 1 - (body->pos.z - FADE_THRESHOLD) / FADE_DEPTH; */
+  /* 	color = NEW_COLOR((int)(0x1F * ratio), */
+  /* 			  (int)(0x3F * ratio), */
+  /* 			  (int)(0x1F * ratio)); */
+  /*   } */
+  /* } */
+  /* else { */
+  /*   color = COLOR_WHITE; */
+  /* } */
+  color = COLOR_WHITE;
+  display_set_color(display, color);
+  draw_planet(display,
+	      pix_x,
+	      pix_y,
+	      pix_r);
+}
+
 void draw_planet(DisplayData * display, int x, int y, int radius) {
+  
   if(x >= -radius &&
      x <= display->width + radius &&
      y >= -radius &&
      y <= display->height + radius) {
+    
+    // Always draw center point no matter radius
+    if(in_display_bounds(display, x, y)) {
+      display->buffer[x + y * display->width] = display->color;
+    }
+    
     int draw_radius = radius;
     while(draw_radius > 0) {
       display_draw_circle(display, x, y, draw_radius);

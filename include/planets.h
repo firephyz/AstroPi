@@ -31,6 +31,7 @@ struct telecamera_t {
 };
 
 void renderScene(DisplayData * display, struct runtime_data_t * data);
+void render_body(DisplayData * display, struct runtime_data_t * data, SolarBody * body);
 void draw_planet(DisplayData * display, int x, int y, int radius);
 
 void fetch_planet_data(struct runtime_data_t * data);

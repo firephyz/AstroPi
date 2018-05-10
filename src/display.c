@@ -31,10 +31,6 @@ void display_draw_circle(DisplayData * display, int x_pos, int y_pos, int radius
   int x = 0;
   int y = radius;
 
-  if(in_display_bounds(display, x_pos, y_pos)) {
-    display->buffer[x_pos + y_pos * display->width] = display->color;
-  }
-
   while(y >= x) {
     if(x * x + y * y <= r2) {
       for(int i = 0; i < 8; ++i) {
