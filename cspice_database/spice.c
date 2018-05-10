@@ -18,7 +18,7 @@ char *names[NUM_OF_BODIES] = {
   "mercury",
   "mars barycenter",
   "jupiter barycenter",
-  "saturn barycenter",
+  "uranus barycenter",
   "pluto barycenter",
   "io",
   "europa",
