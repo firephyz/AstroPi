@@ -20,6 +20,72 @@ void display_update(DisplayData * display) {
   rewind(display->fb);
 }
 
+int in_display_bounds(DisplayData * display, int x, int y) {
+  return x >= 0 && x < display->width && y >= 0 && y < display->height;
+}
+
+void display_draw_circle(DisplayData * display, int x_pos, int y_pos, int radius) {
+
+  int r2 = radius * radius;
+  
+  int x = 0;
+  int y = radius;
+
+  if(in_display_bounds(display, x_pos, y_pos)) {
+    display->buffer[x_pos + y_pos * display->width] = display->color;
+  }
+
+  while(y >= x) {
+    if(x * x + y * y <= r2) {
+      for(int i = 0; i < 8; ++i) {
+	int pix_x = x_pos;
+	int pix_y = y_pos;
+	switch(i) {
+	case 0:
+	  pix_x += x;
+	  pix_y += y;
+	  break;
+	case 1:
+	  pix_x -= x;
+	  pix_y += y;
+	  break;
+	case 2:
+	  pix_x += x;
+	  pix_y -= y;
+	  break;
+	case 3:
+	  pix_x -= x;
+	  pix_y -= y;
+	  break;
+	case 4:
+	  pix_x += y;
+	  pix_y += x;
+	  break;
+	case 5:
+	  pix_x -= y;
+	  pix_y += x;
+	  break;
+	case 6:
+	  pix_x += y;
+	  pix_y -= x;
+	  break;
+	case 7:
+	  pix_x -= y;
+	  pix_y -= x;
+	  break;
+	}
+	if(in_display_bounds(display, pix_x, pix_y)) {
+	  display->buffer[pix_x + pix_y * display->width] = display->color;
+	}
+      }
+      x += 1;
+    }
+    else {
+      y -= 1;
+    }
+  }
+}
+
 void display_draw_rect(DisplayData * display, int x, int y, int width, int height) {
 
   // Draw top line
