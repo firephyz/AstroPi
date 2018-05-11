@@ -7,21 +7,25 @@
 #include "demo.h"
 #include "display.h"
 #include "input.h"
+#include "fonts.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
 
+Glyph * font_glyphs;
+
 int main(int argc, char *argv[]) {
 
+  initFontGlyphs();
   DisplayData * display = init_display();
   
   struct runtime_data_t runtime_data;
   runtime_data.bodies = malloc(sizeof(SolarBody) * INIT_NUM_BODIES);
   //  runtime_data.num_of_bodies = INIT_NUM_BODIES;
   runtime_data.num_of_bodies = INIT_NUM_BODIES;
-  runtime_data.target_body_index = 2;
+  runtime_data.target_body_index = 3;
   runtime_data.time_index = LOCATION_SAMPLES_PER_PLANET / 2;
   runtime_data.cam = malloc(sizeof(TeleCamera));
   *runtime_data.cam = (TeleCamera){
@@ -34,8 +38,7 @@ int main(int argc, char *argv[]) {
   runtime_data.has_input = 0;
   runtime_data.input = (InputPacket){
     .scroll = 0,
-    .button1 = 0,
-    .button2 = 0,
+    .buttons = 0,
     .joyx = 0,
     .joyy = 0
   };
@@ -61,13 +64,19 @@ void demo_planets(DisplayData * display, struct runtime_data_t * data) {
 
   while(1) {
     display_set_color(display, COLOR_BLACK);
-    display_clear(display);
+    //     display_clear(display);
 
     process_input(display, data);
     adjust_solar_bodies(data);
     renderScene(display, data);
+    drawString(display, 5, 5, "Hello Universe!");
 
-    data->time_index += 1;
+    for(int i = 0; i < 128; ++i) {
+      drawChar(display,
+	       10 + FONT_WIDTH * (i % 8),
+	       20 + FONT_HEIGHT * (i / 8),
+	       (char)i);
+    }
     
     display_update(display);
     nanosleep(&delay, NULL);
@@ -76,6 +85,23 @@ void demo_planets(DisplayData * display, struct runtime_data_t * data) {
 
 void process_input(DisplayData * display, struct runtime_data_t * data) {
 
+  InputPacket input;
+  readRuntimeData(data, RUNTIME_INPUT, &input);
+
+  if(input.joyx > 80) {
+    data->time_index += 5;
+  }
+  else if(input.joyx < -80) {
+    data->time_index -= 5;
+  }
+
+  double scale_factor = 0.94;
+  if(input.scroll > 0) {
+    data->cam->fov *= pow(scale_factor, input.scroll);
+  }
+  else if(input.scroll < 0) {
+    data->cam->fov *= pow(2 - scale_factor, -input.scroll);    
+  }
 }
 
 void adjust_solar_bodies(struct runtime_data_t * data) {
