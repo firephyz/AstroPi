@@ -8,11 +8,13 @@
 #include "display.h"
 #include "input.h"
 #include "fonts.h"
+#include "planets.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
+#include <string.h>
 
 Glyph * font_glyphs;
 
@@ -20,33 +22,37 @@ int main(int argc, char *argv[]) {
 
   initFontGlyphs();
   DisplayData * display = init_display();
-  
+
+  // Show starting screen notification.
+  display_set_color(display, COLOR_BLACK);
+  display_clear(display);
+  char * loading_string_1 = "Loading NAIF SPICE Database";
+  char * loading_string_2 = "Please wait...";
+  drawString(display,
+	     (display->width - strlen(loading_string_1) * FONT_WIDTH) / 2,
+	     (display->height - FONT_HEIGHT) / 2 - FONT_HEIGHT,
+	     loading_string_1);
+  drawString(display,
+	     (display->width - strlen(loading_string_2) * FONT_WIDTH) / 2,
+	     (display->height - FONT_HEIGHT) / 2,
+	     loading_string_2);
+  display_update(display);
+
+  // Initialize runtime data
   struct runtime_data_t runtime_data;
-  runtime_data.bodies = malloc(sizeof(SolarBody) * INIT_NUM_BODIES);
-  //  runtime_data.num_of_bodies = INIT_NUM_BODIES;
-  runtime_data.num_of_bodies = INIT_NUM_BODIES;
-  runtime_data.target_body_index = 3;
-  runtime_data.time_index = LOCATION_SAMPLES_PER_PLANET / 2;
-  runtime_data.cam = malloc(sizeof(TeleCamera));
-  *runtime_data.cam = (TeleCamera){
-    .pos = (Vector){0, 0, 0},
-    .angle = (Vector){0, 0, 0},
-    .fov = 0.00025
-  };
-  runtime_data.mutex = malloc(sizeof(pthread_mutex_t));
-  runtime_data.is_running = 1;
-  runtime_data.has_input = 0;
-  runtime_data.input = (InputPacket){
-    .scroll = 0,
-    .buttons = 0,
-    .joyx = 0,
-    .joyy = 0
-  };
-  fetch_planet_data(&runtime_data);
+  init_runtime_data(&runtime_data);
+  
+  // Load the SPICE database
+  fetch_planet_data(display, &runtime_data);
+
+  // Start the input thread
   pthread_mutex_init(runtime_data.mutex, NULL);
   pthread_t * input_thread = init_input_handler(&runtime_data);
 
   // Run the demo
+  set_target_body(&runtime_data, 2);
+  display_set_color(display, COLOR_BLACK);
+  display_clear(display);
   demo_planets(display, &runtime_data);
 
   // Wait for input thread to respond to the program quit
@@ -64,23 +70,91 @@ void demo_planets(DisplayData * display, struct runtime_data_t * data) {
 
   while(1) {
     display_set_color(display, COLOR_BLACK);
-    //     display_clear(display);
+    display_clear(display);
 
     process_input(display, data);
     adjust_solar_bodies(data);
     renderScene(display, data);
-    drawString(display, 5, 5, "Hello Universe!");
-
-    for(int i = 0; i < 128; ++i) {
-      drawChar(display,
-	       10 + FONT_WIDTH * (i % 8),
-	       20 + FONT_HEIGHT * (i / 8),
-	       (char)i);
-    }
+    display_information(display, data);
     
     display_update(display);
     nanosleep(&delay, NULL);
   }
+}
+
+void display_information(DisplayData * display, struct runtime_data_t * data) {
+
+  static char * title = "AstroPi Solar System Explorer";
+  drawString(display,
+	     (display->width - strlen(title) * FONT_WIDTH) / 2,
+	     3 * FONT_HEIGHT + 5,
+	     title);
+  for(int i = 0; i < display->width; ++i) {
+    display->buffer[i + (7 * FONT_HEIGHT) * display->width] = COLOR_WHITE;
+  }
+
+  char fov_string[30];
+  double degrees = *data->info.fov * 180;
+  int d0 = (int)degrees;
+  int d1 = (int)(60 * (degrees - d0));
+  double d2 = 60 * (degrees - d0 - d1 / 60);
+  sprintf(fov_string,
+	  "FOV: %3d\x05 %2d' %2.2f\"",
+	  d0,
+	  d1,
+	  d2);
+  drawString(display,
+	     5,
+	     5,
+	     fov_string);
+
+  char date_string[40];
+  format_date_string(data->time_index, date_string);
+  drawString(display,
+	     display->width - strlen(date_string) * FONT_WIDTH,
+	     5,
+	     date_string);
+
+  drawString(display,
+	     10,
+	     7 + FONT_HEIGHT,
+	     data->info.body_name);
+  SolarBody * body = data->bodies + data->target_body_index;
+  for(int i = 0; i < body->num_of_children; ++i) {
+    char child_name[30];
+    sprintf(child_name, "  - %s", body->children[i]->name);
+    drawString(display,
+	       10,
+	       7 + (2 + i) * FONT_HEIGHT,
+	       child_name);
+  }
+}
+
+void format_date_string(int time_index, char * string) {
+
+  long d_seconds = 10 * 60 * (time_index - (LOCATION_SAMPLES_PER_PLANET / 2));
+  long start_time = 573746400 + d_seconds;
+
+  int seconds = start_time % 60;
+  start_time = (start_time - seconds) / 60;
+  int minutes = start_time % 60;
+  start_time = (start_time - minutes) / 60;
+  int hours = start_time % 24;
+  start_time = (start_time - hours) / 24;
+  int days = start_time % 30;
+  start_time = (start_time - days) / 30;
+  int months = start_time % 12;
+  start_time = (start_time - months) / 12;
+  int years = start_time + 2000;
+
+  sprintf(string,
+	  "%4d-%02d-%02d %02d:%02d:%02d ",
+	  years,
+	  months,
+	  days,
+	  hours,
+	  minutes,
+	  seconds);
 }
 
 void process_input(DisplayData * display, struct runtime_data_t * data) {
@@ -88,11 +162,13 @@ void process_input(DisplayData * display, struct runtime_data_t * data) {
   InputPacket input;
   readRuntimeData(data, RUNTIME_INPUT, &input);
 
-  if(input.joyx > 80) {
-    data->time_index += 5;
+  int max_delta_time = 10;
+  int deadzone = 10;
+  if(input.joyx > deadzone) {
+    data->time_index += (int)((input.joyx - deadzone) / (100.0 - deadzone) * max_delta_time);
   }
-  else if(input.joyx < -80) {
-    data->time_index -= 5;
+  else if(input.joyx < -deadzone) {
+    data->time_index -= (int)((-input.joyx - deadzone) / (100.0 - deadzone) * max_delta_time);
   }
 
   double scale_factor = 0.94;
@@ -154,6 +230,34 @@ void calibrate_camera(struct runtime_data_t * data, SolarBody * target) {
 		 target->pos.y,
 		 target->pos.x * cos(angle) - target->pos.z * sin(angle)};
   target->pos = pos;
+}
+
+void init_runtime_data(struct runtime_data_t * runtime_data) {
+  runtime_data->bodies = malloc(sizeof(SolarBody) * INIT_NUM_BODIES);
+  //  runtime_data.num_of_bodies = INIT_NUM_BODIES;
+  runtime_data->num_of_bodies = INIT_NUM_BODIES;
+  runtime_data->target_body_index = 0;
+  runtime_data->time_index = LOCATION_SAMPLES_PER_PLANET / 2;
+  runtime_data->cam = malloc(sizeof(TeleCamera));
+  runtime_data->info = (DemoInfo){
+    .apparent_size = 0,
+    .body_name = NULL,
+    .fov = &runtime_data->cam->fov
+  };
+  *runtime_data->cam = (TeleCamera){
+    .pos = (Vector){0, 0, 0},
+    .angle = (Vector){0, 0, 0},
+    .fov = 0.00025
+  };
+  runtime_data->mutex = malloc(sizeof(pthread_mutex_t));
+  runtime_data->is_running = 1;
+  runtime_data->has_input = 0;
+  runtime_data->input = (InputPacket){
+    .scroll = 0,
+    .buttons = 0,
+    .joyx = 0,
+    .joyy = 0
+  };
 }
 
 DisplayData * init_display() {

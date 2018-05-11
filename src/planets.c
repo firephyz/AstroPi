@@ -1,5 +1,7 @@
 #include "planets.h"
 #include "demo.h"
+#include "fonts.h"
+#include "display.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -42,7 +44,7 @@ void render_body(DisplayData * display, struct runtime_data_t * data, SolarBody 
   /* 	double ratio = 1 - (body->pos.z - FADE_THRESHOLD) / FADE_DEPTH; */
   /* 	color = NEW_COLOR((int)(0x1F * ratio), */
   /* 			  (int)(0x3F * ratio), */
-  /* 			  (int)(0x1F * ratio)); */
+  /* 		 	  (int)(0x1F * ratio)); */
   /*   } */
   /* } */
   /* else { */
@@ -60,6 +62,12 @@ void render_body(DisplayData * display, struct runtime_data_t * data, SolarBody 
   if(body == data->bodies + data->target_body_index) {
     printf("%2.2f\n", 2 * body->radius * scale_factor);
   }
+}
+
+void set_target_body(struct runtime_data_t * data, int index) {
+
+  data->target_body_index = index;
+  data->info.body_name = data->bodies[index].name;
 }
 
 void draw_planet(DisplayData * display, int x, int y, int radius) {
@@ -82,10 +90,18 @@ void draw_planet(DisplayData * display, int x, int y, int radius) {
   }
 }
 
-void fetch_planet_data(struct runtime_data_t * data) {
+void fetch_planet_data(DisplayData * display, struct runtime_data_t * data) {
 
+  drawString(display, 5, 5, "Hello Universe!");
+  display_update(display);
+  
   for(int i = 0; i < data->num_of_bodies; ++i) {
     load_body(data, i);
+    drawString(display,
+	       5,
+	       5 + (2 + i) * FONT_HEIGHT,
+	       data->bodies[i].name);
+    display_update(display);
     /* SolarBody * body = data->bodies + i; */
     /* printf("%s (%p)\n%f, %f, %f\n%f\n\n", */
     /* 	   body->name, */

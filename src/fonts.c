@@ -19,6 +19,15 @@ void drawChar(DisplayData * window, int x, int y, char c) {
   }
 }
 
+void drawFontTable(DisplayData * display, int x, int y) {
+    for(int i = 0; i < 128; ++i) {
+      drawChar(display,
+	       x + FONT_WIDTH * (i % 8),
+	       y + FONT_HEIGHT * (i / 8),
+	       (char)i);
+    }
+}
+
 void initFontGlyphs() {
 
   font_glyphs = malloc(sizeof(Glyph) * 128);

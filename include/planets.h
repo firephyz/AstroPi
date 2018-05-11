@@ -3,7 +3,7 @@
 #define PLANETS_INCLUDED
 
 #define INIT_NUM_BODIES 15
-#define LOCATION_SAMPLES_PER_PLANET 17280
+#define LOCATION_SAMPLES_PER_PLANET 17280 * 6
 
 #define FADE_THRESHOLD 100.0
 #define FADE_DEPTH 50.0
@@ -34,7 +34,9 @@ void renderScene(DisplayData * display, struct runtime_data_t * data);
 void render_body(DisplayData * display, struct runtime_data_t * data, SolarBody * body);
 void draw_planet(DisplayData * display, int x, int y, int radius);
 
-void fetch_planet_data(struct runtime_data_t * data);
+void set_target_body(struct runtime_data_t * data, int index);
+
+void fetch_planet_data(DisplayData * display, struct runtime_data_t * data);
 void load_body(struct runtime_data_t * data, int planet_index);
 
 #endif
