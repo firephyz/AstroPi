@@ -4,7 +4,7 @@
  * Kyle Burge                            *
  *****************************************/
 
-#define SHOULD_CLEAR_TRAILS 0
+#define SHOULD_CLEAR_TRAILS 1
 
 #include "demo.h"
 #include "display.h"
