@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
   furnsh_c("./kernels/nep081.bsp");
   furnsh_c("./kernels/naif0012.tls");
 
-  SpiceDouble time_window = 24 * 30 * 24 * 3600;
+  SpiceDouble time_window = 2 * 12 * 30 * 24 * 3600;
   SpiceDouble current_time;
   str2et_c("2018/5/10 18:00:00.00", &current_time);
 
@@ -57,15 +57,21 @@ int main(int argc, char *argv[]) {
       SpiceDouble data[6];
       SpiceDouble lt;
       
-      spkezr_c(names[i], et,  "eclipJ2000",
-	       "NONE", "earth", data, &lt);
+      if(i != 0) {
+	spkezr_c(names[i], et,  "eclipJ2000",
+		 "NONE", "earth", data, &lt);
+      }
+      else {
+	spkezr_c("earth", et, "eclipJ2000",
+		 "NONE", "sun", data, &lt);
+      }
       fprintf(out_file,
 	      "%f, %f, %f\n",
 	      data[0],
 	      data[1],
 	      data[2]);
 
-      et += 3600;
+      et += 600;
     }
     
     fclose(out_file);
