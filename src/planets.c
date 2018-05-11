@@ -10,17 +10,17 @@
 
 void renderScene(DisplayData * display, struct runtime_data_t * data) {
 
-  SolarBody * target = data->bodies + data->target_body_index;
-  render_body(display, data, target);
-  for(int i = 0; i < target->num_of_children; ++i) {
-    SolarBody * body = target->children[i];
-    render_body(display, data, body);
-  }
-
-  /* for(int i = 0; i < data->num_of_bodies; ++i) { */
-  /*   SolarBody * body = data->bodies + i; */
+  /* SolarBody * target = data->bodies + data->target_body_index; */
+  /* render_body(display, data, target); */
+  /* for(int i = 0; i < target->num_of_children; ++i) { */
+  /*   SolarBody * body = target->children[i]; */
   /*   render_body(display, data, body); */
   /* } */
+
+  for(int i = 0; i < data->num_of_bodies; ++i) {
+    SolarBody * body = data->bodies + i;
+    render_body(display, data, body);
+  }
 }
 
 void render_body(DisplayData * display, struct runtime_data_t * data, SolarBody * body) {
@@ -56,12 +56,6 @@ void render_body(DisplayData * display, struct runtime_data_t * data, SolarBody 
 	      pix_x,
 	      pix_y,
 	      pix_r);
-
-  // Report the apparent size of the planet so
-  // we can tell which way to zoom
-  if(body == data->bodies + data->target_body_index) {
-    printf("%2.2f\n", 2 * body->radius * scale_factor);
-  }
 }
 
 void set_target_body(struct runtime_data_t * data, int index) {
@@ -190,6 +184,7 @@ void load_body(struct runtime_data_t * data, int planet_index) {
     body->children[0] = data->bodies + 12;
     body->children[1] = data->bodies + 13;
     body->children[2] = data->bodies + 14;
+    break;
   default:
     body->children = NULL;
     body->num_of_children = 0;

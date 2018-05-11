@@ -4,6 +4,8 @@
  * Kyle Burge                            *
  *****************************************/
 
+#define SHOULD_CLEAR_TRAILS 0
+
 #include "demo.h"
 #include "display.h"
 #include "input.h"
@@ -70,7 +72,7 @@ void demo_planets(DisplayData * display, struct runtime_data_t * data) {
 
   while(1) {
     display_set_color(display, COLOR_BLACK);
-    display_clear(display);
+    if(SHOULD_CLEAR_TRAILS) display_clear(display);
 
     process_input(display, data);
     adjust_solar_bodies(data);
@@ -87,10 +89,10 @@ void display_information(DisplayData * display, struct runtime_data_t * data) {
   static char * title = "AstroPi Solar System Explorer";
   drawString(display,
 	     (display->width - strlen(title) * FONT_WIDTH) / 2,
-	     3 * FONT_HEIGHT + 5,
+	     1 * FONT_HEIGHT + 3,
 	     title);
   for(int i = 0; i < display->width; ++i) {
-    display->buffer[i + (7 * FONT_HEIGHT) * display->width] = COLOR_WHITE;
+    display->buffer[i + (2 * FONT_HEIGHT + 5) * display->width] = COLOR_WHITE;
   }
 
   char fov_string[30];
@@ -115,19 +117,32 @@ void display_information(DisplayData * display, struct runtime_data_t * data) {
 	     5,
 	     date_string);
 
+  char body_name[30];
+  strcpy(body_name, data->info.body_name);
+  body_name[0] += 'A' - 'a';
   drawString(display,
 	     10,
-	     7 + FONT_HEIGHT,
-	     data->info.body_name);
+	     3 * FONT_HEIGHT,
+	     body_name);
   SolarBody * body = data->bodies + data->target_body_index;
   for(int i = 0; i < body->num_of_children; ++i) {
-    char child_name[30];
-    sprintf(child_name, "  - %s", body->children[i]->name);
+    sprintf(body_name, "  - %s", body->children[i]->name);
     drawString(display,
 	       10,
-	       7 + (2 + i) * FONT_HEIGHT,
-	       child_name);
+	       2 + (4 + i) * FONT_HEIGHT,
+	       body_name);
   }
+  char distance_string[30];
+  double distance = sqrt(body->pos.x * body->pos.x +
+			 body->pos.y * body->pos.y +
+			 body->pos.z * body->pos.z);
+  int exponent = (int)(log(distance) / log(10));
+  double coef = distance / pow(10, exponent);
+  sprintf(distance_string, "Distance: %1.4f e%d", coef, exponent);
+  drawString(display,
+	     10,
+	     9 * FONT_HEIGHT,
+	     distance_string);
 }
 
 void format_date_string(int time_index, char * string) {
@@ -160,24 +175,65 @@ void format_date_string(int time_index, char * string) {
 void process_input(DisplayData * display, struct runtime_data_t * data) {
 
   InputPacket input;
+  int switched_bodies = 0;
+  int zoomed = 0;
   readRuntimeData(data, RUNTIME_INPUT, &input);
+  //  printf("%d\n", data->input.scroll);
 
-  int max_delta_time = 10;
   int deadzone = 10;
+  static int zooming; // Used to see if we should accelerate time warp speed
   if(input.joyx > deadzone) {
-    data->time_index += (int)((input.joyx - deadzone) / (100.0 - deadzone) * max_delta_time);
+    data->time_index += zooming;
+    if(input.joyx > 90) {
+      ++zooming;
+    }
   }
   else if(input.joyx < -deadzone) {
-    data->time_index -= (int)((-input.joyx - deadzone) / (100.0 - deadzone) * max_delta_time);
+    data->time_index -= zooming;
+    if(input.joyx < -90) {
+      ++zooming;
+    }
+  }
+  else {
+    zooming = 1;
   }
 
   double scale_factor = 0.94;
   if(input.scroll > 0) {
     data->cam->fov *= pow(scale_factor, input.scroll);
+    zoomed = 1;
   }
   else if(input.scroll < 0) {
-    data->cam->fov *= pow(2 - scale_factor, -input.scroll);    
+    data->cam->fov *= pow(2 - scale_factor, -input.scroll);
+    zoomed = 1;
   }
+  input.scroll = 0;
+
+  static int old_buttons = 0;
+  int button_1_edge = !(old_buttons & 0x01) && (input.buttons & 0x01);
+  int button_2_edge = !(old_buttons & 0x02) && (input.buttons & 0x02);
+  if(button_1_edge) {
+    data->target_body_index += 1;
+    switched_bodies = 1;
+  }
+  else if(button_2_edge) {
+    data->target_body_index -= 1;
+    switched_bodies = 1;
+  }
+
+  old_buttons = input.buttons;
+  set_target_body(data, data->target_body_index);
+  // Logic seems reversed but if we don't want to clear trails,
+  // then we have to clear the display to switch bodies
+  if((switched_bodies || zoomed) && !SHOULD_CLEAR_TRAILS) {
+    display_set_color(display, COLOR_BLACK);
+    display_clear(display);
+  }
+
+  // Reset the scroll value since the input handler doesn't.
+  pthread_mutex_lock(data->mutex);
+  data->input.scroll = 0;
+  pthread_mutex_unlock(data->mutex);
 }
 
 void adjust_solar_bodies(struct runtime_data_t * data) {
@@ -190,11 +246,21 @@ void adjust_solar_bodies(struct runtime_data_t * data) {
 
   // Perform rotation transformations to put the body
   // in front of the camera
+  /* SolarBody * target = data->bodies + data->target_body_index; */
+  /* calibrate_camera(data, target); */
+  /* // Also do the same to the children */
+  /* for(int i = 0; i < target->num_of_children; ++i) { */
+  /*   transform_body(data, target->children[i]); */
+  /* } */
   SolarBody * target = data->bodies + data->target_body_index;
-  calibrate_camera(data, target);
-  // Also do the same to the children
-  for(int i = 0; i < target->num_of_children; ++i) {
-    transform_body(data, target->children[i]);
+  for(int i = 0; i < INIT_NUM_BODIES; ++i) {
+    SolarBody * body = data->bodies + i;
+    if(target == body) {
+      calibrate_camera(data, target);
+    }
+    else {
+      transform_body(data, body);
+    }
   }
 }
 
@@ -210,6 +276,9 @@ void transform_body(struct runtime_data_t * data, SolarBody * body) {
   pos = (Vector){-body->pos.x * sin(angle) + body->pos.z * cos(angle),
 		 body->pos.y,
 		 body->pos.x * cos(angle) - body->pos.z * sin(angle)};
+  double temp = pos.x;
+  pos.x = pos.y;
+  pos.y = temp;
   body->pos = pos;  
 }
 
@@ -305,8 +374,12 @@ void setRuntimeData(struct runtime_data_t * data, int choice, void * value) {
   case RUNTIME_HAS_INPUT:
     data->has_input = *(int *)value;
     break;
-  case RUNTIME_INPUT:
-    data->input = *(InputPacket *)value;
+  case RUNTIME_INPUT:;
+    InputPacket * packet = (InputPacket *)value;
+    data->input.scroll += packet->scroll;
+    data->input.joyx = packet->joyx;
+    data->input.joyy = packet->joyy;
+    data->input.buttons = packet->buttons;
     break;
   default:
     fprintf(stderr, "Internal error.\n");
